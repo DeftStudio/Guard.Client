@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>API Client Example</title>
+    <script>
+      class ApiClient {
+        constructor(backendUrl, publicKeyPem) {
+          this.backendUrl = backendUrl;
+          this.publicKeyPem = publicKeyPem;
+        }
+
+        async parsePublicKey(algorithmName) {
+          const pemContents = this.publicKeyPem.trim();
+          const b64Lines = pemContents.split("\n").slice(1, -1);
+          const b64 = b64Lines.join("");
+          const binaryDer = atob(b64);
+          const binaryDerBuf = new Uint8Array(binaryDer.length);
+          for (let i = 0; i < binaryDer.length; i++) {
+            binaryDerBuf[i] = binaryDer.charCodeAt(i);
+          }
+
+          const algorithm = {
+            name: algorithmName,
+            hash: "SHA-256",
+          };
+
+          return await window.crypto.subtle.importKey(
+            "spki",
+            binaryDerBuf.buffer,
+            algorithm,
+            true,
+            algorithmName === "RSA-OAEP" ? ["encrypt"] : ["verify"]
+          );
+        }
+
+        async verifySignature(sign, data) {
+          try {
+            // 使用 RSASSA-PKCS1-v1_5 算法导入公钥
+            const publicKey = await this.parsePublicKey("RSASSA-PKCS1-v1_5");
+            const cleanedSign = sign.replace(/\s+/g, "");
+            const signature = Uint8Array.from(atob(cleanedSign), (c) =>
+              c.charCodeAt(0)
+            );
+
+            const encodedData = new TextEncoder().encode(data);
+
+            const isValid = await window.crypto.subtle.verify(
+              {
+                name: "RSASSA-PKCS1-v1_5",
+              },
+              publicKey,
+              signature,
+              encodedData
+            );
+
+            if (isValid) {
+              console.log("签名验证成功");
+            } else {
+              console.log("签名验证失败");
+            }
+          } catch (error) {
+            console.error("验证签名失败: ", error);
+          }
+        }
+
+        async encryptWithPublicKey(data) {
+          const publicKey = await this.parsePublicKey("RSA-OAEP");
+          const encoded = new TextEncoder().encode(data);
+          const encrypted = await window.crypto.subtle.encrypt(
+            {
+              name: "RSA-OAEP",
+            },
+            publicKey,
+            encoded
+          );
+          return btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+        }
+
+        async sendRequest(endpoint, params) {
+          try {
+            const response = await fetch(this.backendUrl + endpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(params),
+            });
+
+            if (!response.ok) {
+              throw new Error("请求错误: " + (await response.text()));
+            }
+
+            const jsonResponse = await response.json();
+            return jsonResponse;
+          } catch (err) {
+            console.error("请求失败:", err);
+            throw err;
+          }
+        }
+
+        async checkCard(key, device) {
+          try {
+            const msg = await this.encryptWithPublicKey(key);
+            const params = {
+              msg: msg,
+              device_code: device,
+            };
+            const response = await this.sendRequest("/api/check", params);
+            console.log("校验结果: ", response);
+            if (response.check && response.check.sign) {
+              await this.verifySignature(response.check.sign, key);
+            } else {
+              console.error("签名不存在，无法验证签名");
+            }
+          } catch (error) {
+            console.error("卡密校验失败: ", error);
+          }
+        }
+
+        async unbindCard(key) {
+          try {
+            const msg = await this.encryptWithPublicKey(key);
+            const params = {
+              msg: msg,
+            };
+            const response = await this.sendRequest("/api/unbind", params);
+            console.log("解绑结果: ", response);
+
+            if (response.check && response.check.sign) {
+              await this.verifySignature(response.check.sign, key);
+            } else {
+              console.error("签名不存在，无法验证签名");
+            }
+          } catch (error) {
+            console.error("解绑失败: ", error);
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Card Check Example</h1>
+    <label for="card-key">卡密:</label>
+    <input type="text" id="card-key" placeholder="输入卡密" /><br />
+    <label for="device-code">设备代码:</label>
+    <input
+      type="text"
+      id="device-code"
+      placeholder="输入设备代码"
+    /><br /><br />
+    <button
+      onclick="
+        const client = new ApiClient(
+          `url`,
+        //   公钥
+          `-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA21nisY1389xgRPZ64y+V\n021OZSaJjEUT6aPPHuKhBywfxH970OqrBiY+WUrQwS86pFzn2l0ONq9qjIU9TeDO\nHjcJH73T41QSdq1fCa98u8YRL0rdheMf2Hwwa9d1wCNFxvB2fncHJCbhSlPqR001\nGVPnDLmSIAzcb+ML2bq7PVEH5grjZpmhcbNVXDxlnfe1Ko8IMDE5Sv/YNexkrhVb\nYYqZrSeqtRgAdreEL7fckP2ThgYm43EieuVjyvFSrJ7r9YG4CMUSgJuhSEpE2H3e\nAaTcZS9WwrY2gBhcHlVel3xo3U4UCFn6U6Pq5Pj7zE0+HRpVlRkUcVFxbr5fw5Be\n1QIDAQAB\n-----END PUBLIC KEY-----`
+        );
+        client.checkCard(document.getElementById('card-key').value, document.getElementById('device-code').value);
+      "
+    >
+      校验卡密
+    </button>
+    <button
+      onclick="
+        const client = new ApiClient(
+          `url`,
+          //   公钥
+          `-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA21nisY1389xgRPZ64y+V\n021OZSaJjEUT6aPPHuKhBywfxH970OqrBiY+WUrQwS86pFzn2l0ONq9qjIU9TeDO\nHjcJH73T41QSdq1fCa98u8YRL0rdheMf2Hwwa9d1wCNFxvB2fncHJCbhSlPqR001\nGVPnDLmSIAzcb+ML2bq7PVEH5grjZpmhcbNVXDxlnfe1Ko8IMDE5Sv/YNexkrhVb\nYYqZrSeqtRgAdreEL7fckP2ThgYm43EieuVjyvFSrJ7r9YG4CMUSgJuhSEpE2H3e\nAaTcZS9WwrY2gBhcHlVel3xo3U4UCFn6U6Pq5Pj7zE0+HRpVlRkUcVFxbr5fw5Be\n1QIDAQAB\n-----END PUBLIC KEY-----`
+        );
+        client.unbindCard(document.getElementById('card-key').value);
+      "
+    >
+      解绑
+    </button>
+  </body>
+</html>
