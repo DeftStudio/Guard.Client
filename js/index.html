@@ -100,7 +100,7 @@
           }
         }
 
-        async checkCard(key, device) {
+        async checkCard(key, device, projectName) {
           try {
             const msg = await this.encryptWithPublicKey(key);
             const params = {
@@ -113,6 +113,14 @@
               await this.verifySignature(response.check.sign, key);
             } else {
               console.error("签名不存在，无法验证签名");
+            }
+            if (response.check && response.check.project_sign) {
+              await this.verifySignature(
+                response.check.project_sign,
+                projectName
+              );
+            } else {
+              console.error("项目签名验证失败");
             }
           } catch (error) {
             console.error("卡密校验失败: ", error);
@@ -145,10 +153,12 @@
     <label for="card-key">卡密:</label>
     <input type="text" id="card-key" placeholder="输入卡密" /><br />
     <label for="device-code">设备代码:</label>
+    <input type="text" id="device-code" placeholder="输入设备代码" /><br />
+    <label for="project-name">项目名称:</label>
     <input
       type="text"
-      id="device-code"
-      placeholder="输入设备代码"
+      id="project-name"
+      placeholder="输入项目名称"
     /><br /><br />
     <button
       onclick="
@@ -157,7 +167,7 @@
         //   公钥
           `-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA21nisY1389xgRPZ64y+V\n021OZSaJjEUT6aPPHuKhBywfxH970OqrBiY+WUrQwS86pFzn2l0ONq9qjIU9TeDO\nHjcJH73T41QSdq1fCa98u8YRL0rdheMf2Hwwa9d1wCNFxvB2fncHJCbhSlPqR001\nGVPnDLmSIAzcb+ML2bq7PVEH5grjZpmhcbNVXDxlnfe1Ko8IMDE5Sv/YNexkrhVb\nYYqZrSeqtRgAdreEL7fckP2ThgYm43EieuVjyvFSrJ7r9YG4CMUSgJuhSEpE2H3e\nAaTcZS9WwrY2gBhcHlVel3xo3U4UCFn6U6Pq5Pj7zE0+HRpVlRkUcVFxbr5fw5Be\n1QIDAQAB\n-----END PUBLIC KEY-----`
         );
-        client.checkCard(document.getElementById('card-key').value, document.getElementById('device-code').value);
+        client.checkCard(document.getElementById('card-key').value, document.getElementById('device-code').value,document.getElementById('project-name').value);
       "
     >
       校验卡密
