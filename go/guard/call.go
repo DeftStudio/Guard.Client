@@ -40,8 +40,9 @@ type Status struct {
 }
 
 type Check struct {
-	Sign string `json:"sign"`
-	Unix int64  `json:"unix"`
+	Sign        string `json:"sign"`
+	Unix        int64  `json:"unix"`
+	ProjectSign string `json:"project_sign"`
 }
 
 type Response struct {
@@ -70,7 +71,7 @@ func (c *Client) encryptWithPublicKey(data string) (string, error) {
 	return encryptedData, nil
 }
 
-func (c *Client) Check(key, device string) (time.Time, error) {
+func (c *Client) Check(key, device string, projectName ...any) (time.Time, error) {
 	msg, err := c.encryptWithPublicKey(key)
 	if err != nil {
 		return time.Time{}, err
@@ -89,6 +90,13 @@ func (c *Client) Check(key, device string) (time.Time, error) {
 	if err := c.verifySignatureWithPublicKey(key, response.Check.Sign); err != nil {
 		return time.Time{}, errors.New("卡密校验失败，签名验证失败 err:" + err.Error())
 	}
+	if len(projectName) == 0 || projectName[0] == "" {
+		projectName = append(projectName, "Default")
+	}
+	if err := c.verifySignatureWithPublicKey(fmt.Sprint(projectName[0]), response.Check.ProjectSign); err != nil {
+		return time.Time{}, errors.New("卡密校验失败，项目验证失败 err:" + err.Error())
+	}
+
 	return time.Unix(response.Check.Unix, 0), nil
 }
 

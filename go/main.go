@@ -5,7 +5,15 @@ import (
 	"guard/guard"
 )
 
-var key = `公钥`
+var (
+	api_url = "地址"
+	key     = `
+-----BEGIN PUBLIC KEY-----
+密钥
+-----END PUBLIC KEY-----
+`
+	// project = "Default"
+)
 
 func main() {
 	if err := executeCheck(); err != nil {
@@ -18,7 +26,8 @@ func main() {
 }
 
 func createClient() (*guard.Client, error) {
-	client, err := guard.NewClient(key, "地址")
+	// client, err := guard.NewClient(key, "地址")
+	client, err := guard.NewClient(key, api_url)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +41,10 @@ func executeCheck() error {
 	}
 
 	// 卡密和设备码
+	// 第三个参数为项目名称，不添加默认则是Default
 	time, err := client.Check("cs-cs", "1")
+	// time, err := client.Check("cs-cs", "1", project)
+	// time, err := client.Check("cs-cs", "1", "as")
 	if err != nil {
 		return err
 	}
